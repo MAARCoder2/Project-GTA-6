@@ -426,6 +426,117 @@ Do not make unsupported completion percentages or invented performance claims.
 
 ---
 
+## MANDATORY SELF-DEBUGGING LOOP — TEST, FIX, REBUILD, RETEST
+
+This section is mandatory. **Do not stop after writing code, after one test run, or after producing a plan.** The job is to make the existing project work, discover regressions caused by your own fixes, and keep correcting them until the available acceptance gates pass or a real blocker is documented.
+
+### A. Establish a truthful baseline first
+
+1. Inspect the package manager and lockfile. Use the repository's existing package manager and scripts; do not casually change dependencies or regenerate the lockfile.
+2. Before implementation, run the existing type-check/lint, unit tests, and production build using the exact scripts declared by `package.json`. Record each command, exit code, and important output in `BUG_TRIAGE.md` or `TEST_RESULTS.md`.
+3. If the baseline already fails, separate pre-existing failures from new failures. Never claim a test passes unless you actually ran it.
+4. If you have no terminal, browser or execution capability in the environment, state that clearly and use the strongest available static checks. Do not fabricate a successful build, screenshots, browser session, test output, FPS, or agent review.
+
+### B. Repeat this closed loop for every P0/P1 fix and every cross-system change
+
+Follow the cycle below, then repeat it whenever a test fails or a new defect appears:
+
+**Reproduce → Trace the root cause → Write a failing regression test → Make the smallest appropriate fix → Run focused tests → Run the full test suite and type-check → Build production bundle → Run browser/gameplay checks → Inspect errors and visuals → Independent review → Fix findings → Retest.**
+
+Detailed rules:
+
+1. **Reproduce:** Write down exact steps, input, expected behavior, actual behavior, and whether the problem occurs consistently. For intermittent defects, repeat the scenario and record frequency/conditions where practical.
+2. **Trace:** Follow the real call path and source of truth across systems. Check update ordering, coordinate spaces, state ownership, collision shapes, event lifecycle and race conditions. Do not patch a symptom with arbitrary offsets or duplicated state.
+3. **Regression test:** Add a focused test that fails before the fix when a practical automated test can represent the defect. Keep meaningful tests; do not delete, skip, weaken, or rewrite assertions merely to get green results.
+4. **Fix minimally:** Change the smallest coherent set of files. If a module is fundamentally unsound, refactor or replace that module only after documenting why; preserve working public interfaces and unrelated gameplay.
+5. **Focused verification:** Rerun the relevant test immediately after the change. When it fails, inspect the output, identify the cause, fix the cause, and rerun it.
+6. **Integration verification:** Run all existing and new tests, TypeScript/type checks, lint checks if configured, and the production build. A passing unit test alone is not sufficient.
+7. **Runtime verification:** Launch the app and actually play the affected scenario in a real browser when that capability exists. Inspect browser console errors, failed network requests, uncaught/rejected errors, canvas rendering, controls, HUD state, and visible character/vehicle animation. Capture before/after screenshots or a short recording where possible.
+8. **Review your own work adversarially:** Ask what could still break: inverse input mapping, alternate camera angles, repeated start/pause, rapid vehicle entry/exit, multiple targets, blocked shots, overlapping vehicles, NPC death/reaction, and cross-system update order. Create a test for realistic edge cases.
+9. **Independent review:** Have a genuinely separate reviewer inspect the diff for correctness, regressions, missing tests and false claims. If real agent delegation is unavailable, switch roles and perform a separate review pass yourself; do not pretend a different agent reviewed it.
+10. **Retest after review fixes:** Any code change made in response to review reopens the loop. Repeat all relevant focused tests and the full build/test gates. Run the affected browser scenarios again.
+11. **Update evidence:** Only after running the checks, update `TEST_RESULTS.md`, `PROJECT_STATUS.md`, and other docs with the actual outcome, commands, environment and limitations.
+
+**No arbitrary “fixed” declaration:** a bug is `VERIFIED` only when its acceptance test actually ran and passed. Code changes not executed in the relevant runtime remain `FIXED-UNVERIFIED` or `UNVERIFIED`. A blocked check must say what was unavailable and what manual steps would finish verification.
+
+### C. Required automated and browser acceptance scenarios
+
+Adapt these to the real controls and systems already in the repository. Add tests rather than assuming the current test suite covers them.
+
+- **Controls/camera:** Validate left/right and forward/backward directions at camera yaw values such as 0, ±90°, and 180°. Check camera rotation, player orientation, aiming direction and vehicle steering consistently. Include diagonal movement normalization if supported.
+- **Aim and shooting:** Verify the aim pose visibly changes; the weapon points toward the reticle/aim point; the shot query starts from the correct weapon/camera origin; the nearest valid target is selected; walls block hits; hitboxes align with rendered entities; targets take damage once per valid hit; ammo/cooldown are consistent; muzzle/recoil/hit feedback is visible. Do not use center-distance approximations as a hidden substitute for actual hit detection unless the design intentionally calls for them and tests prove reliability.
+- **NPC response:** Test idle, walking, alerting, taking damage, death/fall, and recovery/state transitions that are part of the game. Check multiple NPC variants and verify the correct NPC is hit rather than one behind it.
+- **Vehicles:** Test entering/exiting within and outside interaction range; blocked exit positions; steering and braking; player/vehicle transform synchronization; vehicle-vs-vehicle contact; vehicle-vs-world collision; high-speed collision; spawn/despawn; repeat entry/exit; police-controlled vehicles if they share the same system. Check for tunneling, jitter, overlap, teleporting or double integration.
+- **Lifecycle and stability:** Test title → play → pause → resume → title/restart where supported. Ensure no duplicate animation-frame loops, orphaned keyboard/pointer listeners, stale input or duplicate update calls. Watch for console errors and memory/resource leaks where the available tools allow.
+- **Open-world loop:** Confirm the player can traverse a connected area, approach and interact with vehicles/NPCs, trigger the intended wanted/crime response if implemented, and return to stable gameplay without getting trapped, falling through the world or losing controls.
+- **Regression:** Re-run all pre-existing tests and cover any altered contracts in physics, game rules, save/load and mission progression.
+
+Where Playwright or another browser automation tool is installed, use it for repeatable smoke tests and screenshots; do not add a new heavy testing stack unless necessary and justified. Browser automation does not replace actually checking the rendered 3D scene and gameplay behavior.
+
+### D. Build and release gates — all outcomes must be evidence-based
+
+Do not consider the repair milestone complete until each available gate has been attempted and reported:
+
+- [ ] Dependencies match the existing lockfile and install successfully, or a precise blocker is recorded.
+- [ ] TypeScript/type-check passes.
+- [ ] Configured lint/static checks pass.
+- [ ] Existing tests pass.
+- [ ] New regression tests pass.
+- [ ] Production build completes successfully.
+- [ ] Browser app starts and the core scene renders without fatal console/runtime errors.
+- [ ] All reachable P0 acceptance scenarios pass in runtime.
+- [ ] The integrated regression suite passes after the last code change.
+- [ ] Independent review findings are fixed or explicitly documented.
+- [ ] The final diff is checked for accidental deletions, unused assets, debug spam, secrets, broken imports and unrelated changes.
+- [ ] Run instructions and actual results are written down.
+
+If a gate fails, diagnose and fix the underlying issue, then rerun it. Do not stop merely because a failure appeared: **the failure is input to the next self-debugging cycle.** Continue until the gate passes, or until a genuine external limitation is reached (missing credentials, unavailable runtime/tool, inaccessible dependency, time/resource ceiling, or a risk requiring owner input). For a genuine blocker, finish all work not blocked, provide evidence, and state precisely what is still unverified. Never conceal red gates.
+
+### E. Safe code-replacement rules: repair, do not restart the project
+
+- Do not rewrite the full game, replace the stack, remove the current game and scaffold a new one, or make a broad architectural migration to avoid debugging.
+- Preserve functional code. Delete code only when you have demonstrated it is dead, duplicated, conflicting, unsafe, or incompatible with the corrected implementation. Explain each meaningful deletion in the change summary.
+- It is allowed to rewrite a specific function, entity controller, physics helper, animation rig or module when the existing implementation is the root cause and a smaller patch would be more fragile. Keep the scope local, preserve necessary interfaces, and add migration/regression tests.
+- Avoid unrelated formatting churn, mass renaming, speculative dependencies and giant single-file changes. Do not put the whole game engine into one replacement file.
+- Do not fake missing features using buttons that do nothing, placeholder state, teleport hacks, collision suppression, no-op functions, tests that assert only that objects exist, or visual effects masking gameplay defects.
+- Make one coherent change-set at a time; build and test between major change-sets. If a refactor causes widespread breakage, revert or reduce its scope and preserve the previously working behavior.
+- Update documentation only after reality changes. Code, tests, screenshots and reports must agree.
+
+---
+
+## REAL 3D OPEN-WORLD GAMEPLAY TARGET (INCREMENTAL, PLAYABLE, HONEST)
+
+The goal is more than a scene that merely renders. Build toward a coherent, interactive 3D open-world game using the current Three.js foundation and current repository structure. Do not promise an AAA-scale GTA clone; first make a stable, convincing playable core, then expand in evidence-based phases.
+
+### Phase 1 — Playable foundation (must work before visual expansion)
+
+- Reliable on-foot movement, camera-relative controls, collision with the world, coherent camera follow and responsive mouse/keyboard input.
+- An explorable connected city block/network with streets, sidewalks, buildings, readable scale and safe boundaries; the world must not be a static decorative backdrop.
+- Consistent interaction prompts and a working enter/exit-vehicle loop.
+- Vehicles that steer, brake, collide and remain synchronized with collision physics.
+- Aiming, shooting, hit validation, damage reactions and understandable weapon feedback.
+- NPCs with distinct state transitions and reactions; police response only where the implemented rules support it.
+- Clear pause/restart behavior, understandable HUD, and a stable browser game loop.
+
+### Phase 2 — Credible open-world systems (only after Phase 1 is stable)
+
+- NPC variation beyond recoloring: use distinct silhouettes, body proportions, hair/headwear, clothing combinations and readable animations. Prefer compatible rigged GLB/GLTF assets where available and properly licensed. If compatible assets or rigging tools are unavailable, improve procedural characters incrementally and report the limitation; do not claim a fully rigged system exists when it does not.
+- Better navigation using a road/sidewalk waypoint graph or another tested approach suited to the current world. NPCs and police must not simply move through walls or chase directly through buildings.
+- Coherent traffic/vehicle behavior, robust vehicle collision and reasonable acceleration/turning.
+- Mission/objective flow, crime/wanted behavior and save/load integration consistent with existing project requirements.
+- More believable animation, lighting, materials, sound/impact cues and spatial scale, prioritized by gameplay value and performance.
+
+### Phase 3 — Visual and performance polish
+
+- Reduce excessive flashing, unnecessary glow, oversaturated effects and distracting UI animation. Use consistent lighting, readable contrast, restrained accent colors and a HUD that does not obscure play.
+- Prefer usable licensed/owned assets, correct material scale, shadows and level-of-detail appropriate for browser performance. Never download/import assets without checking their source, license and size.
+- Add debug overlays only in development mode; do not leave noisy debug output or performance-heavy instrumentation enabled in production.
+- Profile the real game before claiming performance improvements. Do not invent FPS or say it is “optimized” without measurements from the available runtime.
+
+### Definition of “real gameplay”
+
+A feature counts as gameplay only if a player can trigger it, observe the result, and the result follows consistent rules. For example, “vehicle entry implemented” requires a player to approach a vehicle, receive a valid interaction, enter and control it, exit safely, and regain on-foot control. “Shooting implemented” requires a visible aim/fire action, a valid target query, collision/occlusion handling, correct damage and an observable hit result. Rendering a model, displaying a button or changing a variable alone does not meet the acceptance criterion.
+
 ## EXECUTION ORDER
 
 **Start with the P0 gameplay bugs first.**
