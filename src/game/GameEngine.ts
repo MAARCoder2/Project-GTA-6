@@ -9,7 +9,7 @@ import { gameAudio } from './audio.ts';
 import type { GameMode, GameSettings, PlayerStats, SaveGameData, WeaponType, MissionId } from './types.ts';
 import { loadGameSave, saveGameSave } from './save.ts';
 import { computeBulletDamage, WEAPON_REGISTRY } from './rules.ts';
-import { V3, type Vec3 } from './physics.ts';
+import { queryRaycastIntersection, type Ray3D, V3, type Vec3 } from './physics.ts';
 
 export class GameEngine {
   public container: HTMLElement;
@@ -318,54 +318,78 @@ export class GameEngine {
       this.vehicleManager
     );
 
-    // If player fired weapon: check hits against world, vehicles, and NPCs
-    if (playerResult.shotFired && playerResult.hitPoint) {
-      const shotRayOrigin = { ...this.player.position, y: this.player.position.y + 1.4 };
-      const aimDir = V3.normalize(V3.sub(playerResult.hitPoint, shotRayOrigin));
+    // If player fired weapon: check unobstructed 3D raycast hits against world blockers, vehicles, and NPCs
+    if (playerResult.shotFired && playerResult.shotOrigin && playerResult.shotDirection) {
+      const ray: Ray3D = {
+        origin: playerResult.shotOrigin,
+        direction: playerResult.shotDirection,
+      };
 
-      // Report gunshot crime to police and alert pedestrians
-      this.policeSystem.reportCrime('FIREARM_DISCHARGE', this.player.position, true);
-      this.npcManager.notifyGunshot(this.player.position, this.player.position);
+      // Pass true weapon muzzle sound origin to police and pedestrians
+      this.policeSystem.reportCrime('FIREARM_DISCHARGE', playerResult.shotOrigin, true);
+      this.npcManager.notifyGunshot(playerResult.shotOrigin, this.player.position);
 
-      // Check hit against NPCs
       const def = WEAPON_REGISTRY[this.player.weaponState.type];
-      for (const npc of this.npcManager.npcs) {
-        if (npc.behavior === 'INCAPACITATED') continue;
-        const toNpc = V3.sub(npc.position, shotRayOrigin);
-        const dist = V3.length(toNpc);
-        if (dist <= def.range) {
-          const dot = V3.dot(aimDir, V3.normalize(toNpc));
-          if (dot > 0.96) {
-            // Hit!
-            const isHeadshot = Math.random() < 0.25;
-            const dmg = computeBulletDamage(def, dist, isHeadshot);
-            const res = this.npcManager.applyDamage(npc.id, dmg, aimDir);
 
-            this.policeSystem.reportCrime('ASSAULT', npc.position, true);
-            if (res.killed) {
-              this.saveData.stats.cash += 150;
-            }
-            break;
+      // Prepare vehicle collision bounding boxes
+      const vehicleTargets = this.vehicleManager.vehicles
+        .filter((v) => !v.isDestroyed)
+        .map((v) => {
+          const halfW = v.config.dimensions.width * 0.5;
+          const halfL = v.config.dimensions.length * 0.5;
+          const cosY = Math.abs(Math.cos(v.yaw));
+          const sinY = Math.abs(Math.sin(v.yaw));
+          const extX = halfW * cosY + halfL * sinY;
+          const extZ = halfW * sinY + halfL * cosY;
+          return {
+            id: v.id,
+            box: {
+              min: { x: v.position.x - extX, y: v.position.y, z: v.position.z - extZ },
+              max: { x: v.position.x + extX, y: v.position.y + v.config.dimensions.height, z: v.position.z + extZ },
+            },
+          };
+        });
+
+      // Prepare active NPCs
+      const npcTargets = this.npcManager.npcs
+        .filter((n) => n.behavior !== 'INCAPACITATED')
+        .map((n) => ({ id: n.id, position: n.position }));
+
+      // Unobstructed 3D raycast hit query (nearest target selected; world blockers occlude)
+      const hitResult = queryRaycastIntersection(
+        ray,
+        def.range,
+        this.district.collision.boxes,
+        npcTargets,
+        vehicleTargets
+      );
+
+      if (hitResult.hit) {
+        if (hitResult.targetType === 'NPC' && hitResult.targetId) {
+          const hitNpc = this.npcManager.npcs.find((n) => n.id === hitResult.targetId);
+          const isHeadshot = hitResult.hitPoint
+            ? hitResult.hitPoint.y >= (hitNpc?.position.y || 0) + 1.35
+            : Math.random() < 0.25;
+          const dmg = computeBulletDamage(def, hitResult.distance, isHeadshot);
+          const res = this.npcManager.applyDamage(hitResult.targetId, dmg, playerResult.shotDirection);
+          this.policeSystem.reportCrime('ASSAULT', hitNpc?.position || this.player.position, true);
+          if (res.killed) {
+            this.saveData.stats.cash += 150;
           }
-        }
-      }
-
-      // Check hit against vehicles
-      for (const veh of this.vehicleManager.vehicles) {
-        if (veh.isDestroyed) continue;
-        const toVeh = V3.sub(veh.position, shotRayOrigin);
-        const dist = V3.length(toVeh);
-        if (dist <= def.range) {
-          const dot = V3.dot(aimDir, V3.normalize(toVeh));
-          if (dot > 0.94) {
+        } else if (hitResult.targetType === 'VEHICLE' && hitResult.targetId) {
+          const veh = this.vehicleManager.vehicles.find((v) => v.id === hitResult.targetId);
+          if (veh && !veh.isDestroyed) {
             veh.health = Math.max(0, veh.health - def.damage);
-            gameAudio.playCollisionImpact(12);
+            gameAudio.playCollisionImpact(14);
             if (veh.health <= 0) {
               veh.isDestroyed = true;
+              this.vehicleManager.onVehicleDestroyed(veh);
               this.policeSystem.reportCrime('VEHICLE_DESTRUCTION', veh.position, true);
             }
-            break;
           }
+        } else if (hitResult.targetType === 'WORLD') {
+          // Bullet struck world wall/geometry: play impact sound
+          gameAudio.playCollisionImpact(8);
         }
       }
     }
@@ -373,6 +397,9 @@ export class GameEngine {
     // Update Vehicles
     const drivingId = this.player.currentVehicle ? this.player.currentVehicle.id : null;
     this.vehicleManager.update(dt, this.district.collision, drivingId);
+    if (this.player.currentVehicle) {
+      this.player.position = { ...this.player.currentVehicle.position };
+    }
 
     // Update NPCs
     const npcResults = this.npcManager.update(

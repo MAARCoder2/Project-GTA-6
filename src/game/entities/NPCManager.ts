@@ -25,8 +25,25 @@ export class NPCManager {
     isPolice = false
   ): NPCInstance {
     const id = `npc_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#6366f1', '#14b8a6', '#64748b'];
-    const outfitColor = isPolice ? '#1e3a8a' : isHostile ? '#7f1d1d' : colors[Math.floor(Math.random() * colors.length)];
+    const casualColors = ['#0284c7', '#059669', '#d97706', '#7c3aed', '#db2777', '#0d9488'];
+    const businessColors = ['#1e293b', '#334155', '#475569', '#3b0764'];
+
+    const archetype = isPolice
+      ? 'POLICE'
+      : isHostile
+      ? 'HOSTILE'
+      : Math.random() < 0.5
+      ? 'BUSINESS'
+      : 'CASUAL';
+
+    const outfitColor =
+      archetype === 'POLICE'
+        ? '#1e3a8a'
+        : archetype === 'HOSTILE'
+        ? '#7f1d1d'
+        : archetype === 'BUSINESS'
+        ? businessColors[Math.floor(Math.random() * businessColors.length)]
+        : casualColors[Math.floor(Math.random() * casualColors.length)];
 
     const targetWp = sidewalkWaypoints.length > 0 ? sidewalkWaypoints[Math.floor(Math.random() * sidewalkWaypoints.length)] : null;
 
@@ -34,6 +51,7 @@ export class NPCManager {
       id,
       name,
       behavior: isHostile ? 'HOSTILE' : 'PATROL_WALK',
+      archetype,
       position: { ...position },
       velocity: { x: 0, y: 0, z: 0 },
       yaw: Math.random() * Math.PI * 2,
@@ -65,13 +83,13 @@ export class NPCManager {
     group.name = `NPC_${npc.id}`;
 
     const skinMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.6 });
-    const shirtMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(npc.outfitColor), roughness: 0.7 });
-    const pantsMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.8 });
-    const shoeMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
+    const outfitMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(npc.outfitColor), roughness: 0.65 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+    const hairMat = new THREE.MeshStandardMaterial({ color: 0x271810, roughness: 0.9 });
 
     // Torso
     const torsoGeo = new THREE.BoxGeometry(0.48, 0.68, 0.28);
-    const torso = new THREE.Mesh(torsoGeo, shirtMat);
+    const torso = new THREE.Mesh(torsoGeo, outfitMat);
     torso.position.y = 1.0;
     torso.castShadow = true;
     group.add(torso);
@@ -83,14 +101,92 @@ export class NPCManager {
     head.castShadow = true;
     group.add(head);
 
+    // Archetype-specific clothing, accessories, and headwear
+    if (npc.archetype === 'POLICE') {
+      // Gold chest badge
+      const badge = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.08, 0.02),
+        new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8, roughness: 0.2 })
+      );
+      badge.position.set(-0.14, 1.15, 0.15);
+      group.add(badge);
+
+      // Black utility duty belt
+      const belt = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, 0.1, 0.3),
+        new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.5 })
+      );
+      belt.position.set(0, 0.68, 0);
+      group.add(belt);
+
+      // Peaked police service cap with black visor
+      const cap = new THREE.Mesh(
+        new THREE.BoxGeometry(0.28, 0.1, 0.3),
+        new THREE.MeshStandardMaterial({ color: 0x1e3a8a })
+      );
+      cap.position.set(0, 1.68, 0.02);
+      group.add(cap);
+      const visor = new THREE.Mesh(
+        new THREE.BoxGeometry(0.26, 0.03, 0.14),
+        new THREE.MeshStandardMaterial({ color: 0x09090b, roughness: 0.2 })
+      );
+      visor.position.set(0, 1.64, 0.18);
+      group.add(visor);
+    } else if (npc.archetype === 'HOSTILE') {
+      // Tactical body armor vest
+      const vest = new THREE.Mesh(
+        new THREE.BoxGeometry(0.52, 0.55, 0.32),
+        new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.8 })
+      );
+      vest.position.set(0, 1.05, 0);
+      group.add(vest);
+
+      // Syndicate red/black bandana or tactical cap
+      const bandana = new THREE.Mesh(
+        new THREE.BoxGeometry(0.28, 0.12, 0.28),
+        new THREE.MeshStandardMaterial({ color: 0x991b1b })
+      );
+      bandana.position.set(0, 1.66, 0);
+      group.add(bandana);
+    } else if (npc.archetype === 'BUSINESS') {
+      // White shirt collar and tie
+      const tie = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.35, 0.02),
+        new THREE.MeshStandardMaterial({ color: 0x991b1b })
+      );
+      tie.position.set(0, 1.12, 0.15);
+      group.add(tie);
+
+      // Groomed hair
+      const hair = new THREE.Mesh(
+        new THREE.BoxGeometry(0.28, 0.12, 0.28),
+        hairMat
+      );
+      hair.position.set(0, 1.67, 0);
+      group.add(hair);
+    } else {
+      // CASUAL: Baseball cap or hoodie
+      const cap = new THREE.Mesh(
+        new THREE.BoxGeometry(0.28, 0.1, 0.32),
+        new THREE.MeshStandardMaterial({ color: 0x334155 })
+      );
+      cap.position.set(0, 1.67, 0.04);
+      group.add(cap);
+    }
+
     // Limbs
     const armGeo = new THREE.BoxGeometry(0.16, 0.6, 0.16);
     const legGeo = new THREE.BoxGeometry(0.2, 0.68, 0.2);
+    const pantsMat = new THREE.MeshStandardMaterial({
+      color: npc.archetype === 'POLICE' ? 0x1e3a8a : npc.archetype === 'BUSINESS' ? 0x1e293b : 0x334155,
+      roughness: 0.8,
+    });
+    const shoeMat = darkMat;
 
     // Left Arm
     const lArmGroup = new THREE.Group();
     lArmGroup.position.set(-0.34, 1.25, 0);
-    const lArm = new THREE.Mesh(armGeo, shirtMat);
+    const lArm = new THREE.Mesh(armGeo, outfitMat);
     lArm.position.y = -0.28;
     lArmGroup.add(lArm);
     group.add(lArmGroup);
@@ -99,7 +195,7 @@ export class NPCManager {
     // Right Arm
     const rArmGroup = new THREE.Group();
     rArmGroup.position.set(0.34, 1.25, 0);
-    const rArm = new THREE.Mesh(armGeo, shirtMat);
+    const rArm = new THREE.Mesh(armGeo, outfitMat);
     rArm.position.y = -0.28;
     rArmGroup.add(rArm);
     group.add(rArmGroup);
@@ -179,11 +275,12 @@ export class NPCManager {
       npc.behavior = 'INCAPACITATED';
       npc.animState = 'fall';
       
-      // Tip mesh onto ground
+      // Lay flat on ground surface realistically without clipping
       const mesh = this.npcMeshes.get(npc.id);
       if (mesh) {
         mesh.rotation.x = Math.PI / 2;
-        mesh.position.y = 0.15;
+        mesh.rotation.z = (Math.random() - 0.5) * 0.4;
+        mesh.position.y = 0.22;
       }
       return { killed: true };
     } else {
@@ -192,6 +289,29 @@ export class NPCManager {
       npc.speed = 5.6;
     }
     return { killed: false };
+  }
+
+  public removeNPC(id: string): void {
+    const idx = this.npcs.findIndex((n) => n.id === id);
+    if (idx !== -1) {
+      this.npcs.splice(idx, 1);
+    }
+    const mesh = this.npcMeshes.get(id);
+    if (mesh) {
+      this.scene.remove(mesh);
+      mesh.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry?.dispose();
+          if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
+          else child.material?.dispose();
+        }
+      });
+      this.npcMeshes.delete(id);
+    }
+    this.leftArms.delete(id);
+    this.rightArms.delete(id);
+    this.leftLegs.delete(id);
+    this.rightLegs.delete(id);
   }
 
   public update(

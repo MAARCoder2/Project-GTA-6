@@ -103,37 +103,46 @@ export class PoliceSystem {
         spottedByAnyPolice = true;
       }
 
-      // Pursuit navigation: steer towards player (or last known position)
-      const targetPos = hasSight || !this.wantedState.lastKnownPosition
+      // Pursuit navigation: steer towards player (when in sight) or last known position (via road waypoints)
+      let targetPos = hasSight || !this.wantedState.lastKnownPosition
         ? playerPosition
         : this.wantedState.lastKnownPosition;
+
+      // When line of sight is lost and distance is large, pick intermediate road waypoint
+      if (!hasSight && roadWaypoints.length > 0 && distToPlayer > 35) {
+        let bestWp = roadWaypoints[0];
+        let bestDist = Infinity;
+        for (const wp of roadWaypoints) {
+          const dToCruiser = Math.hypot(wp.x - cruiser.position.x, wp.z - cruiser.position.z);
+          const dToTarget = Math.hypot(wp.x - targetPos.x, wp.z - targetPos.z);
+          if (dToCruiser > 12 && dToTarget < bestDist) {
+            bestDist = dToTarget;
+            bestWp = wp;
+          }
+        }
+        targetPos = { x: bestWp.x, y: 0.1, z: bestWp.z };
+      }
 
       const toTargetX = targetPos.x - cruiser.position.x;
       const toTargetZ = targetPos.z - cruiser.position.z;
       const targetYaw = Math.atan2(toTargetX, toTargetZ);
 
-      // Smooth steering
+      // Compute steering difference
       let yawDiff = targetYaw - cruiser.yaw;
       while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
       while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
 
-      cruiser.yaw += Math.sign(yawDiff) * Math.min(Math.abs(yawDiff), cruiser.config.turnSpeed * dt * 1.5);
-      cruiser.frontWheelSteer = Math.max(-0.4, Math.min(0.4, yawDiff));
+      // Steering input for authoritative vehicle physics
+      const steering = Math.max(-1, Math.min(1, yawDiff * 1.6));
+      cruiser.frontWheelSteer = steering * 0.4;
 
-      // Acceleration: accelerate aggressively towards target
-      const forwardX = Math.sin(cruiser.yaw);
-      const forwardZ = Math.cos(cruiser.yaw);
+      // Throttle and handbrake control
+      const distToTarget = Math.hypot(toTargetX, toTargetZ);
+      const throttle = distToTarget > 5 ? 1.0 : 0.2;
+      const handbrake = Math.abs(yawDiff) > 1.2 && cruiser.speed > 16;
 
-      const targetSpeed = distToPlayer > 8 ? cruiser.config.maxSpeed * 0.9 : 10;
-      if (cruiser.speed < targetSpeed) {
-        cruiser.speed += cruiser.config.acceleration * dt;
-      }
-
-      cruiser.velocity.x = forwardX * cruiser.speed;
-      cruiser.velocity.z = forwardZ * cruiser.speed;
-
-      cruiser.position.x += cruiser.velocity.x * dt;
-      cruiser.position.z += cruiser.velocity.z * dt;
+      cruiser.driverId = 'police';
+      cruiser.controls = { throttle, steering, handbrake };
     }
 
     // Update audio siren

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { VehicleConfig, VehicleInstance, VehicleType } from '../types.ts';
 export type { VehicleInstance };
-import { updateVehiclePhysics, calculateCollisionImpulse, resolveSphereAABBCollision, V3, type Vec3 } from '../physics.ts';
+import { updateVehiclePhysics, calculateCollisionImpulse, resolveSphereAABBCollision, resolveVehicleAABBCollision, V3, type Vec3 } from '../physics.ts';
 import type { WorldCollisionData } from '../world.ts';
 import { gameAudio } from '../audio.ts';
 
@@ -293,7 +293,35 @@ export class VehicleManager {
     for (const veh of this.vehicles) {
       if (veh.isDestroyed) continue;
 
-      // Ground elevation
+      // Authoritative physics integration when controls are provided (by player or AI)
+      if (veh.controls) {
+        const nextState = updateVehiclePhysics(
+          {
+            position: veh.position,
+            velocity: veh.velocity,
+            yaw: veh.yaw,
+            speed: veh.speed,
+          },
+          veh.controls,
+          {
+            acceleration: veh.config.acceleration,
+            maxSpeed: veh.config.maxSpeed,
+            reverseSpeed: veh.config.reverseSpeed,
+            brakeForce: veh.config.brakeForce,
+            turnSpeed: veh.config.turnSpeed,
+            drag: 1.2,
+            grip: 0.95,
+          },
+          dt
+        );
+
+        veh.position = nextState.position;
+        veh.velocity = nextState.velocity;
+        veh.yaw = nextState.yaw;
+        veh.speed = nextState.speed;
+      }
+
+      // Ground elevation snapping
       const groundY = collision.groundElevation(veh.position.x, veh.position.z);
       veh.position.y = groundY;
 
@@ -329,10 +357,9 @@ export class VehicleManager {
         }
       }
 
-      // Check collision with static world boxes
-      const vehRadius = veh.config.dimensions.width * 0.55;
+      // Multi-point collision check with static world boxes (front, center, rear)
       for (const box of collision.boxes) {
-        const res = resolveSphereAABBCollision(veh.position, vehRadius, box);
+        const res = resolveVehicleAABBCollision(veh.position, veh.yaw, veh.config.dimensions, box);
         if (res.collided) {
           // Calculate collision impulse
           const impulse = calculateCollisionImpulse(veh.velocity, res.normal, 0.3);
@@ -391,7 +418,7 @@ export class VehicleManager {
     }
   }
 
-  private onVehicleDestroyed(veh: VehicleInstance): void {
+  public onVehicleDestroyed(veh: VehicleInstance): void {
     const mesh = this.vehicleMeshes.get(veh.id);
     if (mesh) {
       // Darken materials to charred black
@@ -405,6 +432,27 @@ export class VehicleManager {
       });
     }
     gameAudio.playCollisionImpact(35);
+  }
+
+  public removeVehicle(id: string): void {
+    const idx = this.vehicles.findIndex((v) => v.id === id);
+    if (idx !== -1) {
+      this.vehicles.splice(idx, 1);
+    }
+    const mesh = this.vehicleMeshes.get(id);
+    if (mesh) {
+      this.scene.remove(mesh);
+      mesh.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry?.dispose();
+          if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
+          else child.material?.dispose();
+        }
+      });
+      this.vehicleMeshes.delete(id);
+    }
+    this.wheelMeshes.delete(id);
+    this.sirenLights.delete(id);
   }
 
   public getNearestVehicle(pos: Vec3, maxDist = 4.0): VehicleInstance | null {

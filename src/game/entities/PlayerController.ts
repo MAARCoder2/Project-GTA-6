@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { PlayerStats, WeaponState, WeaponType } from '../types.ts';
 import { WEAPON_REGISTRY } from '../rules.ts';
-import { resolveSphereAABBCollision, updateVehiclePhysics, V3, type Vec3 } from '../physics.ts';
+import { resolveSphereAABBCollision, updateVehiclePhysics, computeMovementVector, isPointInsideAABB, V3, type Vec3 } from '../physics.ts';
 import type { WorldCollisionData } from '../world.ts';
 import { gameAudio } from '../audio.ts';
 import type { VehicleInstance, VehicleManager } from './VehicleManager.ts';
@@ -37,6 +37,7 @@ export class PlayerController {
 
   private animCycle = 0;
   private footstepTimer = 0;
+  private recoilKick = 0;
 
   constructor(scene: THREE.Object3D, initialStats: PlayerStats) {
     this.stats = { ...initialStats };
@@ -178,9 +179,11 @@ export class PlayerController {
     },
     collision: WorldCollisionData,
     vehicleManager: VehicleManager
-  ): { shotFired: boolean; hitPoint?: Vec3 } {
+  ): { shotFired: boolean; shotOrigin?: Vec3; shotDirection?: Vec3; hitPoint?: Vec3 } {
     let shotFired = false;
     let hitPoint: Vec3 | undefined;
+    let shotOrigin: Vec3 | undefined;
+    let shotDirection: Vec3 | undefined;
 
     // Handle weapon reload timer
     if (this.weaponState.isReloading) {
@@ -205,36 +208,13 @@ export class PlayerController {
       this.meshGroup.visible = false;
       this.position = { ...this.currentVehicle.position };
 
-      // Handle vehicle driving input
+      // Handle vehicle driving input: positive input.moveRight steers right
       const throttle = input.moveForward;
-      const steering = -input.moveRight;
+      const steering = input.moveRight;
       const handbrake = input.jump;
 
-      // Update vehicle physics
-      const nextState = updateVehiclePhysics(
-        {
-          position: this.currentVehicle.position,
-          velocity: this.currentVehicle.velocity,
-          yaw: this.currentVehicle.yaw,
-          speed: this.currentVehicle.speed,
-        },
-        { throttle, steering, handbrake },
-        {
-          acceleration: this.currentVehicle.config.acceleration,
-          maxSpeed: this.currentVehicle.config.maxSpeed,
-          reverseSpeed: this.currentVehicle.config.reverseSpeed,
-          brakeForce: this.currentVehicle.config.brakeForce,
-          turnSpeed: this.currentVehicle.config.turnSpeed,
-          drag: 1.2,
-          grip: 0.95,
-        },
-        dt
-      );
-
-      this.currentVehicle.position = nextState.position;
-      this.currentVehicle.velocity = nextState.velocity;
-      this.currentVehicle.yaw = nextState.yaw;
-      this.currentVehicle.speed = nextState.speed;
+      // Assign controls for authoritative VehicleManager update
+      this.currentVehicle.controls = { throttle, steering, handbrake };
       this.currentVehicle.frontWheelSteer = steering * 0.42;
 
       // Update audio
@@ -245,7 +225,7 @@ export class PlayerController {
 
       // Exit Vehicle
       if (input.interact) {
-        this.exitVehicle();
+        this.exitVehicle(collision);
       }
 
       return { shotFired: false };
@@ -269,25 +249,16 @@ export class PlayerController {
 
     const moveSpeed = this.isAiming ? 2.5 : this.isSprinting ? 8.2 : 4.4;
 
-    // Movement direction relative to camera yaw
-    const forwardX = Math.sin(this.cameraYaw);
-    const forwardZ = Math.cos(this.cameraYaw);
-    const rightX = forwardZ;
-    const rightZ = -forwardX;
-
-    const dirX = forwardX * input.moveForward + rightX * input.moveRight;
-    const dirZ = forwardZ * input.moveForward + rightZ * input.moveRight;
-    const moveLen = Math.sqrt(dirX * dirX + dirZ * dirZ);
+    // Movement direction relative to camera yaw using validated basis
+    const moveVec = computeMovementVector(input.moveForward, input.moveRight, this.cameraYaw);
+    const moveLen = Math.sqrt(moveVec.x * moveVec.x + moveVec.z * moveVec.z);
 
     if (moveLen > 0.05) {
-      const normDirX = dirX / moveLen;
-      const normDirZ = dirZ / moveLen;
-
       // Face direction of movement, unless aiming (face camera forward)
       if (this.isAiming) {
         this.yaw = this.cameraYaw;
       } else {
-        const targetYaw = Math.atan2(normDirX, normDirZ);
+        const targetYaw = Math.atan2(moveVec.x, moveVec.z);
         // Smooth rotation
         let diff = targetYaw - this.yaw;
         while (diff < -Math.PI) diff += Math.PI * 2;
@@ -295,8 +266,8 @@ export class PlayerController {
         this.yaw += diff * Math.min(1, dt * 14);
       }
 
-      this.velocity.x = normDirX * moveSpeed;
-      this.velocity.z = normDirZ * moveSpeed;
+      this.velocity.x = moveVec.x * moveSpeed;
+      this.velocity.z = moveVec.z * moveSpeed;
 
       // Stamina drain
       if (this.isSprinting) {
@@ -309,8 +280,8 @@ export class PlayerController {
       const legSwing = Math.sin(this.animCycle) * (this.isSprinting ? 0.75 : 0.45);
       this.leftLeg.rotation.x = legSwing;
       this.rightLeg.rotation.x = -legSwing;
-      this.leftArm.rotation.x = -legSwing * 0.8;
       if (!this.isAiming) {
+        this.leftArm.rotation.x = -legSwing * 0.8;
         this.rightArm.rotation.x = legSwing * 0.8;
       }
 
@@ -328,8 +299,8 @@ export class PlayerController {
       // Return limbs to idle
       this.leftLeg.rotation.x *= 0.8;
       this.rightLeg.rotation.x *= 0.8;
-      this.leftArm.rotation.x *= 0.8;
       if (!this.isAiming) {
+        this.leftArm.rotation.x *= 0.8;
         this.rightArm.rotation.x *= 0.8;
       }
 
@@ -337,12 +308,18 @@ export class PlayerController {
       this.stats.stamina = Math.min(this.stats.maxStamina, this.stats.stamina + dt * 25);
     }
 
-    // Aim posture
+    // Decay recoil kick smoothly
+    if (this.recoilKick > 0) {
+      this.recoilKick = Math.max(0, this.recoilKick - dt * 3.5);
+    }
+
+    // Two-handed tactical aiming posture with pitch alignment and upward recoil kick
     if (this.isAiming) {
-      this.rightArm.rotation.x = -Math.PI / 2 + this.cameraPitch * 0.8;
-      this.rightArm.rotation.y = -0.2;
-      this.leftArm.rotation.x = -Math.PI / 3;
-      this.leftArm.rotation.y = 0.4;
+      this.yaw = this.cameraYaw;
+      this.rightArm.rotation.x = -Math.PI / 2 + this.cameraPitch - this.recoilKick;
+      this.rightArm.rotation.y = -0.15;
+      this.leftArm.rotation.x = -Math.PI / 2 + this.cameraPitch * 0.9 - this.recoilKick * 0.5;
+      this.leftArm.rotation.y = 0.35;
     } else {
       this.rightArm.rotation.y = 0;
       this.leftArm.rotation.y = 0;
@@ -405,16 +382,31 @@ export class PlayerController {
       this.weaponState.ammoInMag--;
       gameAudio.playGunshot(this.weaponState.type);
       this.muzzleFlash.intensity = 3.5;
+      this.recoilKick = 0.28; // Visible upward firing recoil kick
       shotFired = true;
 
-      // Calculate shot raycast
-      const aimDirX = Math.sin(this.cameraYaw);
+      // Calculate shot raycast along camera aim direction with pitch scaling
+      const cosPitch = Math.cos(this.cameraPitch);
+      const aimDirX = Math.sin(this.cameraYaw) * cosPitch;
       const aimDirY = -Math.sin(this.cameraPitch);
-      const aimDirZ = Math.cos(this.cameraYaw);
+      const aimDirZ = Math.cos(this.cameraYaw) * cosPitch;
+      shotDirection = { x: aimDirX, y: aimDirY, z: aimDirZ };
+
+      const forwardX = Math.sin(this.cameraYaw);
+      const forwardZ = Math.cos(this.cameraYaw);
+      const rightX = forwardZ;
+      const rightZ = -forwardX;
+
+      shotOrigin = {
+        x: this.position.x + forwardX * 0.5 + rightX * 0.35,
+        y: this.position.y + 1.35 - Math.sin(this.cameraPitch) * 0.3,
+        z: this.position.z + forwardZ * 0.5 + rightZ * 0.35,
+      };
+
       hitPoint = {
-        x: this.position.x + aimDirX * 35,
-        y: this.position.y + 1.4 + aimDirY * 35,
-        z: this.position.z + aimDirZ * 35,
+        x: shotOrigin.x + aimDirX * def.range,
+        y: shotOrigin.y + aimDirY * def.range,
+        z: shotOrigin.z + aimDirZ * def.range,
       };
 
       if (this.weaponState.ammoInMag === 0) {
@@ -422,7 +414,13 @@ export class PlayerController {
       }
     }
 
-    return { shotFired, hitPoint };
+    return { shotFired, shotOrigin, shotDirection, hitPoint };
+  }
+
+  public isNearVehicle(vehicleManager: VehicleManager): boolean {
+    if (this.currentVehicle) return true;
+    const nearVeh = vehicleManager.getNearestVehicle(this.position, 3.8);
+    return Boolean(nearVeh && !nearVeh.isDestroyed);
   }
 
   public enterVehicle(vehicle: VehicleInstance): void {
@@ -432,18 +430,49 @@ export class PlayerController {
     gameAudio.playUIBlip('CONFIRM');
   }
 
-  public exitVehicle(): void {
+  public exitVehicle(collision?: WorldCollisionData): void {
     if (!this.currentVehicle) return;
-    // Spawn player beside vehicle
-    const sideX = Math.cos(this.currentVehicle.yaw) * (this.currentVehicle.config.dimensions.width + 1.0);
-    const sideZ = -Math.sin(this.currentVehicle.yaw) * (this.currentVehicle.config.dimensions.width + 1.0);
+    const v = this.currentVehicle;
+    const yaw = v.yaw;
+    const forwardX = Math.sin(yaw);
+    const forwardZ = Math.cos(yaw);
+    const rightX = forwardZ;
+    const rightZ = -forwardX;
 
-    this.position.x = this.currentVehicle.position.x + sideX;
-    this.position.z = this.currentVehicle.position.z + sideZ;
-    this.position.y = this.currentVehicle.position.y;
+    const sideDist = v.config.dimensions.width * 0.5 + 1.2;
+    const backDist = v.config.dimensions.length * 0.5 + 1.2;
+
+    // 4 candidate positions: Driver side (car left: -right), Passenger side (car right: +right), Rear (-forward), Front (+forward)
+    const candidates: Vec3[] = [
+      { x: v.position.x - rightX * sideDist, y: v.position.y, z: v.position.z - rightZ * sideDist }, // Driver side (car left)
+      { x: v.position.x + rightX * sideDist, y: v.position.y, z: v.position.z + rightZ * sideDist }, // Passenger side (car right)
+      { x: v.position.x - forwardX * backDist, y: v.position.y, z: v.position.z - forwardZ * backDist }, // Rear
+      { x: v.position.x + forwardX * backDist, y: v.position.y, z: v.position.z + forwardZ * backDist }, // Front
+    ];
+
+    let chosenPos = candidates[0];
+    if (collision) {
+      for (const cand of candidates) {
+        let blocked = false;
+        for (const box of collision.boxes) {
+          if (isPointInsideAABB(cand, box)) {
+            blocked = true;
+            break;
+          }
+        }
+        if (!blocked) {
+          chosenPos = cand;
+          break;
+        }
+      }
+    }
+
+    this.position.x = chosenPos.x;
+    this.position.z = chosenPos.z;
+    this.position.y = v.position.y;
     this.velocity = { x: 0, y: 0, z: 0 };
-    this.currentVehicle.driverId = null;
-    this.currentVehicle.isEngineRunning = false;
+    v.driverId = null;
+    v.isEngineRunning = false;
     this.currentVehicle = null;
     this.meshGroup.visible = true;
     gameAudio.playUIBlip('CONFIRM');

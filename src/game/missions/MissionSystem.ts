@@ -99,6 +99,18 @@ export class MissionSystem {
     const def = MISSIONS[id];
     if (!def) return;
 
+    // Cleanup any existing mission entities to prevent duplicates on restart
+    if (this.targetVehicle) {
+      vehicleManager.removeVehicle(this.targetVehicle.id);
+      this.targetVehicle = null;
+    }
+    if (this.missionEnemies.length > 0) {
+      for (const enemyId of this.missionEnemies) {
+        npcManager.removeNPC(enemyId);
+      }
+      this.missionEnemies = [];
+    }
+
     // Deep copy steps
     const steps = def.steps.map((s) => ({ ...s, completed: false }));
 

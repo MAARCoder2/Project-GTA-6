@@ -76,14 +76,17 @@ export interface VehicleInstance {
   driverId: string | null; // 'player' or NPC id or null
   wheelRotation: number;
   frontWheelSteer: number;
+  controls?: { throttle: number; steering: number; handbrake: boolean };
 }
 
 export type NPCBehavior = 'IDLE' | 'PATROL_WALK' | 'FLEE' | 'WITNESS_ALERT' | 'HOSTILE' | 'INCAPACITATED';
+export type NPCArchetype = 'CASUAL' | 'BUSINESS' | 'HOSTILE' | 'POLICE';
 
 export interface NPCInstance {
   id: string;
   name: string;
   behavior: NPCBehavior;
+  archetype?: NPCArchetype;
   position: { x: number; y: number; z: number };
   velocity: { x: number; y: number; z: number };
   yaw: number;

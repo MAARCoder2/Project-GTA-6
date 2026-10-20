@@ -1,4 +1,5 @@
 import type { BoundingBox3D, Ray3D, RayHit } from './types.ts';
+export type { BoundingBox3D, Ray3D, RayHit };
 
 export interface Vec3 {
   x: number;
@@ -246,6 +247,7 @@ export function updateVehiclePhysics(
   // Vehicle forward and right vectors based on yaw
   const forwardX = Math.sin(state.yaw);
   const forwardZ = Math.cos(state.yaw);
+  // Screen right is perpendicular to forward (clockwise in X-Z plane, +X is East/Right)
   const rightX = forwardZ;
   const rightZ = -forwardX;
 
@@ -257,7 +259,7 @@ export function updateVehiclePhysics(
   const speedRatio = Math.abs(forwardVelocity) / (config.maxSpeed || 1);
   const effectiveTurnSpeed = config.turnSpeed * (1 - speedRatio * 0.45);
   
-  // Turn vehicle only if moving
+  // Turn vehicle only if moving: steering right (positive input) turns towards screen right (+yaw)
   let yawDelta = 0;
   if (Math.abs(forwardVelocity) > 0.2) {
     const directionSign = forwardVelocity >= 0 ? 1 : -1;
@@ -367,3 +369,158 @@ export function calculateCollisionImpulse(
     damage,
   };
 }
+
+/**
+ * Compute normalized world-space movement vector from forward/right input
+ * relative to camera yaw angle, with diagonal normalization.
+ */
+export function computeMovementVector(
+  moveForward: number,
+  moveRight: number,
+  cameraYaw: number
+): { x: number; z: number } {
+  const forwardX = Math.sin(cameraYaw);
+  const forwardZ = Math.cos(cameraYaw);
+  // True screen right basis: perpendicular to forward (clockwise in X-Z plane, +X is East/Right)
+  const rightX = forwardZ;
+  const rightZ = -forwardX;
+
+  const rawX = forwardX * moveForward + rightX * moveRight;
+  const rawZ = forwardZ * moveForward + rightZ * moveRight;
+  const len = Math.sqrt(rawX * rawX + rawZ * rawZ);
+
+  if (len < 0.0001) {
+    return { x: 0, z: 0 };
+  }
+
+  // Normalize so diagonal movement does not exceed 1.0
+  const maxMagnitude = Math.min(1.0, len);
+  return {
+    x: (rawX / len) * maxMagnitude,
+    z: (rawZ / len) * maxMagnitude,
+  };
+}
+
+export interface RaycastHitResult {
+  hit: boolean;
+  targetType?: 'WORLD' | 'NPC' | 'VEHICLE';
+  targetId?: string;
+  distance: number;
+  hitPoint?: Vec3;
+}
+
+/**
+ * Perform an unobstructed 3D raycast query against world blockers, vehicles, and NPCs.
+ * Selects only the nearest hit so world geometry correctly occludes targets.
+ */
+export function queryRaycastIntersection(
+  ray: Ray3D,
+  maxRange: number,
+  worldBoxes: BoundingBox3D[],
+  npcTargets: Array<{ id: string; position: Vec3 }>,
+  vehicleTargets: Array<{ id: string; box: BoundingBox3D }>
+): RaycastHitResult {
+  let closestDist = maxRange;
+  let closestHit: RaycastHitResult = {
+    hit: false,
+    distance: maxRange,
+  };
+
+  // 1. World blockers (walls, buildings)
+  for (const box of worldBoxes) {
+    const res = intersectRayAABB(ray, box, maxRange);
+    if (res.hit && res.distance < closestDist) {
+      closestDist = res.distance;
+      closestHit = {
+        hit: true,
+        targetType: 'WORLD',
+        distance: res.distance,
+        hitPoint: res.point,
+      };
+    }
+  }
+
+  // 2. Vehicles
+  for (const v of vehicleTargets) {
+    const res = intersectRayAABB(ray, v.box, maxRange);
+    if (res.hit && res.distance < closestDist) {
+      closestDist = res.distance;
+      closestHit = {
+        hit: true,
+        targetType: 'VEHICLE',
+        targetId: v.id,
+        distance: res.distance,
+        hitPoint: res.point,
+      };
+    }
+  }
+
+  // 3. NPCs (Hitbox: width 0.8m, height 1.8m, depth 0.8m centered at npc.position)
+  for (const npc of npcTargets) {
+    const npcBox: BoundingBox3D = {
+      min: { x: npc.position.x - 0.4, y: npc.position.y, z: npc.position.z - 0.4 },
+      max: { x: npc.position.x + 0.4, y: npc.position.y + 1.8, z: npc.position.z + 0.4 },
+    };
+    const res = intersectRayAABB(ray, npcBox, maxRange);
+    if (res.hit && res.distance < closestDist) {
+      closestDist = res.distance;
+      closestHit = {
+        hit: true,
+        targetType: 'NPC',
+        targetId: npc.id,
+        distance: res.distance,
+        hitPoint: res.point,
+      };
+    }
+  }
+
+  return closestHit;
+}
+
+/**
+ * Multi-point vehicle collision resolution against an AABB.
+ * Checks front bumper, cabin center, and rear bumper to prevent tunneling and clipping.
+ */
+export function resolveVehicleAABBCollision(
+  vehiclePos: Vec3,
+  yaw: number,
+  dimensions: { width: number; height: number; length: number },
+  box: BoundingBox3D
+): { position: Vec3; collided: boolean; normal: Vec3 } {
+  const forwardX = Math.sin(yaw);
+  const forwardZ = Math.cos(yaw);
+  const halfLen = dimensions.length * 0.38;
+  const radius = dimensions.width * 0.52;
+
+  // 3 sample points: Front, Center, Rear
+  const samplePoints: Vec3[] = [
+    { x: vehiclePos.x + forwardX * halfLen, y: vehiclePos.y + 0.5, z: vehiclePos.z + forwardZ * halfLen },
+    { x: vehiclePos.x, y: vehiclePos.y + 0.5, z: vehiclePos.z },
+    { x: vehiclePos.x - forwardX * halfLen, y: vehiclePos.y + 0.5, z: vehiclePos.z - forwardZ * halfLen },
+  ];
+
+  for (const pt of samplePoints) {
+    const res = resolveSphereAABBCollision(pt, radius, box);
+    if (res.collided) {
+      // Offset vehicle center by the push-out displacement of this sample point
+      const pushX = res.position.x - pt.x;
+      const pushZ = res.position.z - pt.z;
+      return {
+        position: {
+          x: vehiclePos.x + pushX,
+          y: vehiclePos.y,
+          z: vehiclePos.z + pushZ,
+        },
+        collided: true,
+        normal: res.normal,
+      };
+    }
+  }
+
+  return {
+    position: vehiclePos,
+    collided: false,
+    normal: { x: 0, y: 0, z: 0 },
+  };
+}
+
