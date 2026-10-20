@@ -1,0 +1,973 @@
+# PROJECT APEX
+## Autonomous Browser-Based 3D Open-World Game Engineering & Stress-Test Benchmark
+
+**Mission:** Build, test, optimize, and deliver an original, realistic, browser-playable 3D open-world action game that rigorously tests your reasoning, coding, systems engineering, physics implementation, AI behavior, visual design, tool use, and autonomous problem-solving capabilities.
+
+You are the project’s technical director, principal game architect, senior gameplay programmer, physics engineer, AI engineer, graphics engineer, UI/UX designer, test engineer, performance analyst, and release manager.
+
+Your task is not to describe a game that could exist. Your task is to create the strongest genuinely functional and verifiable game the available environment can support.
+
+The reference is the systemic depth and immersive gameplay of modern open-world action games such as Grand Theft Auto. Create an original game with its own name, characters, city, missions, vehicles, visual identity, and assets. Do not copy proprietary game content or claim equivalence to GTA VI’s production quality or scale.
+
+The primary objective is **maximum functional depth within a deliberately compact world**.
+
+---
+
+# PART I — NON-NEGOTIABLE REQUIREMENTS
+
+## 1. Target environment
+
+Primary development environment: Google AI Studio.
+
+Primary runtime: Desktop web browser.
+
+Primary testing environment: The user's own PC through a supported browser.
+
+Required outcome: An exportable project that can be run locally using documented instructions.
+
+Preferred technology stack, subject to actual environment verification:
+
+- TypeScript
+- React where appropriate for application UI
+- Three.js with React Three Fiber where suitable
+- Vite or the existing supported build system
+- A compatible physics engine such as Rapier, if available and appropriate
+- Vitest for unit tests
+- Playwright for browser automation if supported by the available tools
+
+Use WebGL as the broadly compatible rendering baseline. Evaluate WebGPU only if it is genuinely supported and offers a justified advantage. Provide an appropriate fallback or clearly document unsupported environments.
+
+Do not add dependencies indiscriminately. Select a coherent, maintainable stack.
+
+The game must not require a native game-engine installation merely to play the exported browser build. Do not assume the developer environment can directly access the user's local filesystem, GPU, terminal, or browser automation tools.
+
+Verify those capabilities first.
+
+## 2. Environment and tool verification
+
+Before implementation, determine which capabilities are genuinely available:
+
+- File creation and multi-file project editing.
+- Package installation and dependency resolution.
+- Terminal or code execution.
+- Development-server execution.
+- Browser preview and live interaction.
+- Console, network, and runtime error inspection.
+- Screenshot capture and visual inspection.
+- Automated browser testing.
+- Actual physics or gameplay simulation execution.
+- Independent agent delegation or parallel work.
+- Project export or download.
+- Optional multimodal generation and analysis tools.
+
+Classify each capability as AVAILABLE, CONFIGURATION REQUIRED, UNAVAILABLE, or UNVERIFIED.
+
+Create `ENVIRONMENT_REPORT.md`.
+
+Never fabricate tool access, agent participation, successful commands, screenshots, test results, or performance measurements.
+
+If a capability is missing, implement the best feasible alternative and document the limitation. Continue working on tasks that are not blocked.
+
+## 3. Maximum practical autonomy
+
+Work independently wherever the environment permits.
+
+You must:
+
+1. Analyze requirements and dependencies.
+2. Design the architecture.
+3. Create project files.
+4. Implement the game.
+5. Execute available build and test commands.
+6. Inspect actual failures.
+7. Fix defects and regressions.
+8. Re-test modified systems.
+9. Measure browser performance.
+10. Prepare the exportable project and documentation.
+
+Do not stop after writing a plan.
+
+Do not ask for routine technical approvals. Make sensible, reversible decisions and record them.
+
+If real parallel agents are supported, delegate bounded tasks with clear interfaces and acceptance criteria. Otherwise, perform the same workstreams sequentially. Never pretend that simulated roles are independent agents.
+
+Prioritize working code and test evidence over lengthy explanations.
+
+---
+
+# PART II — GAME DESIGN
+
+## 4. Original game concept
+
+Create a realistic, compact urban sandbox provisionally titled PROJECT APEX: CITY RESPONSE.
+
+The player explores an interconnected city district with roads, intersections, buildings, pedestrian areas, traffic, public spaces, alleys, and accessible landmarks.
+
+The world must feel coherent rather than assembled from disconnected primitive objects.
+
+Use a deliberately limited but polished playable area. Expand it only when the existing systems are reliable.
+
+The city must support walking, running, driving, exploration, contextual interactions, missions, NPC reactions, combat encounters, police pursuit, and progression.
+
+### Visual requirements
+
+Create a consistent realistic visual identity using:
+
+- Properly scaled 3D meshes.
+- Detailed road surfaces, sidewalks, curbs, and intersections.
+- Varied buildings with coherent facades, windows, doors, and materials.
+- Vehicles with distinct shapes and materials.
+- Characters with appropriate proportions and visible animation.
+- Physically motivated lighting and material response.
+- Directional sunlight, ambient illumination, and shadows where affordable.
+- Atmospheric depth and restrained post-processing.
+- Suitable environmental audio and spatial sound where supported.
+- Carefully designed HUD, typography, icons, menus, and interaction prompts.
+
+Do not rely on colorful boxes, floating labels, default primitive shapes, or a generic dashboard to disguise incomplete gameplay.
+
+Procedural geometry is acceptable when it produces convincing shapes and materials. Use original or appropriately licensed assets when useful and available.
+
+Use instancing, LOD, texture reuse, and geometry budgets to keep rendering practical.
+
+Do not trade all performance for visual effects. The target is realistic presentation at a sustainable frame rate.
+
+## 5. Third-person player controller
+
+Implement a complete third-person controller.
+
+Required behavior:
+
+- Walking, running, stopping, and direction changes.
+- Acceleration and deceleration rather than instantaneous movement.
+- Ground detection and gravity.
+- Jumping with sensible timing and landing behavior.
+- Slope handling and collision-aware movement.
+- Smooth camera following and rotation.
+- Camera obstruction avoidance.
+- Responsive keyboard and mouse controls.
+- Correct movement relative to the camera.
+- Character orientation that responds to movement direction.
+- Appropriate animation blending between locomotion states.
+- Contextual interactions.
+- Entering and exiting vehicles.
+- Pause and input-state cleanup.
+- Respawn or recovery after falling outside the playable world.
+
+Movement must remain responsive. Do not add artificial inertia that makes the character feel unresponsive.
+
+Use a documented coordinate convention, units, movement speeds, acceleration values, and gravity parameters.
+
+## 6. Camera and presentation
+
+Create a polished third-person camera with:
+
+- Smooth follow behavior.
+- Adjustable distance and sensitivity.
+- Collision-aware positioning.
+- Different follow behavior for walking and driving.
+- Smooth transitions between gameplay states.
+- Controlled camera response to acceleration, braking, and turns.
+- Aiming or targeting camera mode where appropriate.
+- Sensible handling of walls and tight spaces.
+- Options for motion sensitivity and camera shake.
+
+Camera smoothing must use frame-rate-independent interpolation or equivalent time-based calculations.
+
+Avoid sudden teleports, uncontrolled oscillations, clipping through nearby walls, and extreme camera lag.
+
+---
+
+# PART III — REAL GAMEPLAY SYSTEMS
+
+## 7. Physics architecture
+
+Physics must be an actual, testable part of the game.
+
+Prefer a maintained physics engine for rigid-body simulation and collision handling. Do not imitate complex physics by manually moving meshes without a coherent collision model.
+
+Separate simulation state from rendering state.
+
+Use a fixed or appropriately controlled physics timestep with render interpolation where supported. Handle large frame-time spikes and tab suspension without allowing the simulation to become unstable.
+
+Implement and test:
+
+- Static world collision.
+- Dynamic body collision.
+- Player ground contact.
+- Vehicle-to-world collision.
+- Vehicle-to-vehicle collision.
+- Character-to-world interaction.
+- Projectile collision.
+- Trigger volumes and interaction zones.
+- Collision filtering and layer rules.
+- Material-dependent friction and restitution where appropriate.
+- Object reset and recovery.
+- Cleanup of physics bodies and event listeners.
+
+Maintain a documented physics configuration.
+
+Do not use arbitrary collision responses that contradict the simulated state.
+
+Where complex behavior cannot be modeled physically, implement a deterministic approximation and document it honestly.
+
+## 8. Vehicle simulation
+
+Implement at least two distinguishable vehicle configurations if practical, beginning with one fully functional vehicle.
+
+Required controls:
+
+- Acceleration.
+- Braking.
+- Reverse.
+- Steering.
+- Handbrake where appropriate.
+- Enter and exit.
+- Vehicle camera.
+- Speed and gear feedback where applicable.
+- Vehicle recovery.
+
+Vehicle handling must account for:
+
+- Mass and inertia.
+- Speed-dependent steering.
+- Acceleration and braking forces.
+- Grip or traction.
+- Lateral stability.
+- Ground contact.
+- Collision response.
+- Orientation changes.
+- Slope and terrain effects where supported.
+
+A raycast-based vehicle controller is acceptable if it is stable and consistently implemented. A full rigid-body vehicle is also acceptable if it works reliably in the chosen engine.
+
+Avoid sliding, uncontrolled spinning, unrealistic instantaneous stops, and vehicles that pass through world geometry.
+
+### Damage and vehicle state
+
+Implement a consistent vehicle damage model.
+
+Collision severity may depend on relative velocity, effective mass, and collision impulse or another documented approximation.
+
+Damage should affect defined vehicle states and, where implemented, handling or appearance.
+
+Do not claim detailed deformation physics unless actual deformation is implemented.
+
+### Vehicle acceptance tests
+
+Verify:
+
+- Forward and reverse movement.
+- Braking and stopping.
+- Steering response at different speeds.
+- Vehicle collision with a wall.
+- Collision with another vehicle.
+- Enter/exit behavior.
+- Recovery from a stuck state.
+- Correct interaction with world collision.
+
+---
+
+# PART IV — NPC INTELLIGENCE AND CONSEQUENCES
+
+## 9. NPC architecture
+
+Every important NPC must have an explicit behavioral model.
+
+Use finite-state machines, behavior trees, utility selection, or a suitable combination.
+
+Create clear states such as:
+
+- Idle.
+- Walking.
+- Following a route.
+- Avoiding an obstacle.
+- Reacting to a disturbance.
+- Investigating.
+- Fleeing.
+- Calling for assistance.
+- Being pursued.
+- Incapacitated.
+- Recovering or removed from the active simulation, as appropriate.
+
+Not every NPC needs every state. Define legal transitions and conditions.
+
+NPC movement must respect collision and navigation constraints.
+
+Use navigation paths or waypoints with local obstacle avoidance. Prevent agents from becoming permanently trapped against walls or repeatedly colliding with one another.
+
+NPCs should have appropriate movement speeds, reaction delays, perception limits, and cooldowns.
+
+Avoid omniscient behavior. NPCs must not respond to events they could not plausibly perceive unless the game rules explicitly allow it.
+
+Implement a debug mode that displays NPC state, target, perception status, and navigation information when practical.
+
+## 10. Event-driven world simulation
+
+Build a shared event system so that important actions propagate consistently across gameplay systems.
+
+Examples:
+
+- Player attacks an object or NPC.
+- Projectile collides with a surface.
+- NPC witnesses a disturbance.
+- NPC flees or requests assistance.
+- Police receive a valid report.
+- Wanted level increases.
+- Police units search or pursue.
+- Player escapes detection.
+- Mission state changes.
+- World events update the UI and audio.
+
+Define event schemas and ownership.
+
+Prevent duplicated events, contradictory states, repeated police dispatch, and race conditions.
+
+Important game events should be inspectable through a development event log.
+
+## 11. Police and wanted-level system
+
+Implement a coherent wanted-level system with multiple escalation states.
+
+The exact number of levels may be tuned to the game design, but escalation must have real consequences.
+
+Include:
+
+- Witness or detection logic.
+- Visibility or line-of-sight checks.
+- A reporting delay or event propagation mechanism where appropriate.
+- Police dispatch and spawning rules.
+- Search and pursuit.
+- Distance and visibility-based detection.
+- A lost-sight or search phase.
+- Escape conditions.
+- Wanted-level decay after the appropriate conditions are met.
+- Police interaction with world collision and traffic.
+- Recovery from stuck or unreachable pursuit states.
+
+Police must not know the player's exact position at all times.
+
+Avoid spawning police directly in the player's field of view or inside solid geometry.
+
+Use explicit state transitions and cooldowns.
+
+Create repeatable tests for detection, escalation, pursuit, lost sight, escape, and reset.
+
+## 12. Crime and world-rule consistency
+
+Define a documented rules table for consequential actions.
+
+For each action, specify:
+
+- Preconditions.
+- Immediate gameplay effect.
+- Witness or detection requirements.
+- NPC reactions.
+- Police consequences.
+- Wanted-level changes.
+- Mission implications.
+- Cooldowns and recovery behavior.
+
+Examples include trespassing in restricted areas, damaging vehicles, assaulting an NPC, firing a weapon in public, and attacking a police unit.
+
+Do not trigger every consequence automatically. Make the rules depend on the configured world logic.
+
+An action performed out of sight should not necessarily produce the same response as an action witnessed by a nearby NPC.
+
+Ensure consequences are consistent across gameplay, AI, UI, and missions.
+
+---
+
+# PART V — ADVANCED COMBAT SIMULATION
+
+## 13. Combat architecture
+
+Implement a coherent, non-graphic combat system with original game assets.
+
+Begin with one functional firearm. Add other weapons only after the base system is reliable.
+
+Required systems:
+
+- Weapon selection.
+- Aiming.
+- Firing cooldown.
+- Ammunition state.
+- Reloading.
+- Recoil.
+- Muzzle feedback.
+- Projectile or raycast hit detection.
+- Range and collision handling.
+- Weapon-specific parameters.
+- Hit confirmation.
+- Damage calculation.
+- NPC state transitions.
+- Police consequences.
+- Appropriate sound and visual feedback.
+
+Choose raycast-based weapons or simulated projectiles according to the desired gameplay.
+
+For a hitscan weapon, use an actual raycast from the correct firing origin and direction. Include obstruction checks and appropriate range limits.
+
+For a projectile weapon, implement a real trajectory under the configured simulation rules, including velocity, gravity where relevant, and collision.
+
+Do not mix incompatible assumptions about projectile travel time and instantaneous hits.
+
+## 14. Impact response and ragdoll
+
+NPC reactions must be driven by actual gameplay events.
+
+A hit should be validated against the target's collision representation and damageable state.
+
+Where appropriate, calculate a documented damage value from weapon parameters, distance, hit location, and other implemented factors.
+
+Implement distinct, consistent responses such as:
+
+- Flinch or stagger.
+- Loss of balance.
+- Stumbling or falling.
+- Incapacitation.
+- A non-graphic death state if required by the game design.
+
+Advanced ragdoll physics may be used if the selected character rig and physics integration genuinely support it.
+
+If ragdoll is implemented, ensure the character's animated and physics-driven states do not fight each other. Implement safe transitions back to a valid state where recovery is permitted.
+
+If full ragdoll is unavailable, build a controlled procedural or animation-based fallback and identify it accurately.
+
+Do not claim realistic human biomechanics. Model game-appropriate reactions with consistent physical parameters and testable state transitions.
+
+## 15. Combat verification
+
+Test:
+
+- Shots hitting and missing targets.
+- Wall obstruction.
+- Range limits.
+- Ammunition exhaustion.
+- Reload timing.
+- Cooldown enforcement.
+- Collision with non-damageable objects.
+- Correct NPC damage state transitions.
+- Multiple simultaneous hit events.
+- NPC reaction consistency.
+- Witness detection.
+- Police escalation.
+- Cleanup of projectiles and effects.
+
+Use non-graphic representations of injury and incapacitation. Prioritize coherent mechanics over graphic effects.
+
+---
+
+# PART VI — MISSIONS, WORLD, AND PROGRESSION
+
+## 16. Open-world structure
+
+Create a compact but fully interconnected district.
+
+It must contain traversable streets, intersections, buildings, landmarks, pedestrian paths, driving routes, and meaningful interaction areas.
+
+Use collision boundaries that correspond to visible geometry.
+
+Do not allow the player or vehicles to pass through solid buildings or become permanently trapped.
+
+Implement world streaming or spatial partitioning only if useful at the selected scale. A compact world may be better served by a simpler, reliable architecture.
+
+## 17. Missions
+
+Create at least three distinct, playable original missions.
+
+Suggested mission types:
+
+1. Navigation or delivery.
+2. Driving challenge or pursuit.
+3. A multi-stage mission involving NPC interaction, combat, or branching outcomes.
+
+Each mission must support:
+
+- A clear start condition.
+- Objective tracking.
+- Valid state transitions.
+- Completion criteria.
+- Failure conditions.
+- Retry or restart.
+- Rewards or progression.
+- Appropriate UI and audio feedback.
+- Safe handling of player death, vehicle loss, or mission interruption where applicable.
+
+Missions must be completable through gameplay rather than by setting an internal flag manually.
+
+Create automated tests for mission state logic and browser-level tests for critical end-to-end paths where possible.
+
+## 18. Save system
+
+Implement local persistence for essential progress and settings where feasible.
+
+Use a versioned save schema.
+
+Handle missing, malformed, and outdated save data safely.
+
+Provide reset or new-game functionality.
+
+Ensure reloading the page does not produce contradictory world states or duplicate important entities.
+
+Document any progress that intentionally resets between sessions.
+
+---
+
+# PART VII — VISUAL QUALITY AND USER EXPERIENCE
+
+## 19. Realistic presentation
+
+Treat the visual quality as an engineering requirement.
+
+Create coherent material, lighting, color, scale, and composition standards.
+
+Character animation, vehicle motion, and camera behavior must agree with the simulated game state.
+
+Add appropriate:
+
+- Idle and locomotion animations.
+- Running and turning transitions.
+- Vehicle acceleration and braking feedback.
+- Wheel rotation and steering response.
+- Collision feedback.
+- NPC reactions.
+- Weapon and interaction feedback.
+- Environmental audio.
+- Spatial audio where supported.
+
+Avoid excessive camera shake, overdone bloom, distracting chromatic effects, and unnecessary visual clutter.
+
+The game should remain readable while moving quickly.
+
+Use appropriate asset compression, efficient textures, and sensible draw-call budgets.
+
+## 20. Professional interface
+
+Design a coherent player-facing UI rather than a generic AI-generated dashboard.
+
+Include:
+
+- Title screen.
+- Start or resume.
+- Settings.
+- Pause and restart.
+- Controls guide.
+- Mission objective display.
+- Minimap or navigation guidance.
+- Interaction prompts.
+- Vehicle speed and status.
+- Wanted-level feedback.
+- Weapon and ammunition information.
+- Loading and error feedback.
+
+Use a consistent typography system, restrained colors, clear hierarchy, responsive layout, and keyboard accessibility.
+
+The interface must reflect real game state. Never display a successful mission, available ammunition, police status, or save state that contradicts the simulation.
+
+---
+
+# PART VIII — ARCHITECTURE AND ENGINEERING DISCIPLINE
+
+## 21. Separate simulation, rendering, and presentation
+
+Organize the code into clear modules.
+
+Suggested boundaries:
+
+- Application bootstrap.
+- Rendering and scene setup.
+- World generation and assets.
+- Player controller.
+- Camera controller.
+- Physics and collision.
+- Vehicle simulation.
+- NPC simulation.
+- Navigation.
+- Weapons and damage.
+- Police and wanted levels.
+- Mission system.
+- Event bus.
+- Save system.
+- UI and HUD.
+- Audio.
+- Performance monitoring.
+- Test fixtures.
+
+Use these as logical boundaries, not a reason to create unnecessary files.
+
+Rendering must not be the source of truth for game state.
+
+Do not implement core rules exclusively inside visual components.
+
+Use explicit interfaces and typed data structures.
+
+Avoid giant monolithic files, duplicate sources of truth, excessive global mutable state, and circular dependencies.
+
+Document important architecture decisions in `DECISIONS.md`.
+
+## 22. Determinism and simulation stability
+
+Use controlled random seeds where repeatable testing is required.
+
+Keep physics and important gameplay updates independent of rendering frame rate.
+
+Ensure NPC state changes, mission transitions, damage events, and police escalation follow explicit rules.
+
+Handle paused, resumed, and backgrounded browser tabs safely.
+
+Avoid duplicate update loops, leaked event listeners, unbounded entity growth, and repeated registration of input handlers.
+
+Create development assertions for important invariants, such as:
+
+- A vehicle cannot be driven by two players simultaneously.
+- A completed mission cannot unexpectedly return to its active state.
+- An NPC cannot simultaneously occupy incompatible terminal states.
+- A destroyed or removed entity cannot continue processing active gameplay events.
+- A projectile cannot apply damage repeatedly after its valid impact.
+- Wanted-level transitions cannot skip required conditions without a defined rule.
+
+---
+
+# PART IX — TEST-DRIVEN DEVELOPMENT
+
+## 23. Required project documents
+
+Create and maintain:
+
+- `ENVIRONMENT_REPORT.md`
+- `REQUIREMENTS.md`
+- `ARCHITECTURE.md`
+- `IMPLEMENTATION_PLAN.md`
+- `DECISIONS.md`
+- `TASK_LEDGER.md`
+- `TEST_PLAN.md`
+- `TEST_RESULTS.md`
+- `BUGS.md`
+- `PERFORMANCE_REPORT.md`
+- `PROJECT_STATUS.md`
+- `README.md`
+
+Keep the documents concise and consistent with the implementation.
+
+## 24. Milestone 0 — Verify and plan
+
+Inspect the actual environment, select the technology stack, define the requirements, establish module interfaces, and identify the most important technical risks.
+
+Do not spend the entire session planning.
+
+Proceed to implementation once the essential architecture is established.
+
+## 25. Milestone 1 — Playable vertical slice
+
+Implement a working browser game containing:
+
+- A coherent 3D urban environment.
+- A third-person player controller.
+- Camera and world collision.
+- One drivable vehicle.
+- Basic NPC behavior.
+- One functioning weapon.
+- A minimal but real damage and reaction system.
+- Police detection and a basic pursuit loop.
+- One completable mission.
+- A functional HUD and pause system.
+
+Run the build and verify the actual gameplay.
+
+Do not report this milestone as complete until the essential features have been tested.
+
+## 26. Milestone 2 — Simulation depth
+
+Expand the NPC state system, vehicle handling, impact responses, police behavior, mission system, crime rules, and persistence.
+
+Ensure that all systems interact through consistent event and state contracts.
+
+## 27. Milestone 3 — Visual polish
+
+Improve models, materials, lighting, animations, sound, camera behavior, environmental detail, and UI.
+
+Use real browser preview and visual inspection where available.
+
+Do not claim visual validation from source code alone.
+
+## 28. Milestone 4 — Automated testing
+
+Write unit tests for deterministic logic and integration tests for system interactions.
+
+Use browser automation if actually available.
+
+Otherwise, create repeatable manual procedures and label them clearly as manual.
+
+Test both normal behavior and edge cases.
+
+## 29. Milestone 5 — Performance and reliability
+
+Profile representative gameplay.
+
+Optimize the actual bottlenecks rather than making speculative changes.
+
+Retest affected systems after every significant optimization.
+
+## 30. Milestone 6 — Export and delivery
+
+Produce an exportable project with reproducible dependencies, setup instructions, and a locally runnable browser build.
+
+Verify the build using available execution tools.
+
+If the environment cannot run the project locally, state that clearly and provide exact instructions for testing on the user's PC.
+
+Do not confuse an in-platform preview with successful local execution.
+
+---
+
+# PART X — BROWSER PERFORMANCE BENCHMARK
+
+## 31. Performance targets
+
+Target a stable, playable experience on an ordinary desktop PC.
+
+Use a configurable quality system:
+
+- Low.
+- Medium.
+- High.
+
+Include settings for resolution scaling, shadows, post-processing, and NPC simulation density where practical.
+
+Optimize through:
+
+- Instanced rendering.
+- Frustum culling.
+- Efficient geometry and materials.
+- Object pooling.
+- Bounded AI updates.
+- Spatial partitioning when appropriate.
+- Controlled shadow-map resolution.
+- Reduced unnecessary allocations.
+- Efficient physics queries.
+- Asset loading and disposal discipline.
+
+Do not assume the user's PC has a dedicated GPU or unlimited memory.
+
+## 32. Measurement protocol
+
+When genuine browser measurement tools are available, record:
+
+- Browser and version.
+- Operating system if known.
+- Screen resolution and render resolution.
+- Graphics API and quality settings.
+- NPC and active entity counts.
+- Test scenario and duration.
+- Average FPS.
+- Frame-time percentiles, including p95 where measurable.
+- Memory usage where reliably observable.
+- Console errors and failed resource requests.
+- Results before and after optimization.
+
+Use reproducible scenarios:
+
+A. Standing and camera movement.
+
+B. Walking through a crowded street.
+
+C. Driving through intersections.
+
+D. Vehicle collision and recovery.
+
+E. NPC-heavy simulation.
+
+F. Combat and police pursuit.
+
+G. Long-duration gameplay and cleanup.
+
+A nominal goal is 60 FPS on a defined configuration, with a stable 30 FPS fallback target on weaker supported hardware.
+
+These are targets, not guaranteed outcomes.
+
+Never invent results. If a metric cannot be measured, report it as UNMEASURED.
+
+## 33. Browser compatibility and recovery
+
+Test the supported browser environment.
+
+Handle:
+
+- Unsupported rendering features.
+- WebGL initialization failure.
+- Asset-loading failure.
+- Resize and orientation changes.
+- Lost or restored rendering contexts where feasible.
+- Browser tab suspension.
+- Keyboard focus and pointer-lock behavior.
+- Input cleanup when the game loses focus.
+- Memory cleanup during restart or scene transitions.
+
+Provide a useful error message instead of a blank screen whenever practical.
+
+---
+
+# PART XI — ADVERSARIAL QUALITY ASSURANCE
+
+## 34. Independent engineering review
+
+Review the game as a skeptical external reviewer.
+
+Look for:
+
+- Cosmetic features that are not functional.
+- Inconsistent collision geometry.
+- Unreliable physics.
+- NPCs that ignore obstacles.
+- Police that detect the player without valid perception.
+- Damage applied multiple times.
+- Mission softlocks.
+- Broken save/load behavior.
+- Camera clipping and sudden jumps.
+- Vehicle state contradictions.
+- Incorrect animation transitions.
+- Memory leaks and growing entity counts.
+- Missing assets.
+- Build failures.
+- Performance regressions.
+- Inaccurate UI.
+- Exposed secrets.
+- Unsupported claims in documentation.
+
+Record each significant issue, reproduce it where possible, fix the root cause, and retest it.
+
+Do not delete failing tests to achieve a green report.
+
+Do not weaken acceptance criteria silently.
+
+## 35. Fault-injection tests
+
+Where safe and feasible, deliberately test:
+
+- Missing assets.
+- Invalid save data.
+- Rapid repeated input.
+- Pausing during an active mission.
+- Resetting while a vehicle is moving.
+- NPCs blocked by obstacles.
+- Police losing sight of the player.
+- Collisions at different speeds.
+- Browser tab suspension during gameplay.
+- Restarting after a failed mission.
+- High NPC counts.
+- Extended gameplay sessions.
+
+The objective is to expose genuine defects, not merely to demonstrate the expected path.
+
+---
+
+# PART XII — OPTIONAL ADVANCED CAPABILITIES
+
+## 36. Use additional tools only when beneficial
+
+If available, use image generation for original assets, multimodal inspection for screenshots or gameplay recordings, and code execution for real tests.
+
+If independent agents are supported, separate bounded workstreams and integrate them under a designated owner.
+
+Use visual evidence to detect problems that source-code review cannot reliably identify.
+
+Never claim that a tool, modality, agent, or external service was used unless it actually was.
+
+Do not require paid services, API keys, or cloud infrastructure for core gameplay unless essential and explicitly authorized.
+
+## 37. Honest completion reporting
+
+At the end, distinguish:
+
+- IMPLEMENTED.
+- VERIFIED.
+- PARTIALLY IMPLEMENTED.
+- UNVERIFIED.
+- BLOCKED.
+- FAILED.
+
+A feature being implemented does not automatically mean it is verified.
+
+A passing unit test does not automatically prove that the feature works in browser gameplay.
+
+A successful browser preview does not automatically prove the exported project works on the user's PC.
+
+A high FPS reading from an empty scene does not prove performance in a populated city.
+
+Use evidence appropriate to each claim.
+
+---
+
+# PART XIII — FINAL DELIVERABLES
+
+## 38. Required deliverables
+
+Provide:
+
+1. Complete source code.
+2. Dependency manifest and lockfile when supported.
+3. Reproducible setup and run instructions.
+4. The browser-playable game.
+5. All required original assets or documented asset-generation procedures.
+6. Automated tests and their actual results.
+7. Manual test instructions for any unautomated workflows.
+8. Architecture and project status documents.
+9. Bug and known-limitation reports.
+10. Browser performance measurements, where available.
+11. Exact export or download instructions.
+12. A clear list of remaining work.
+
+## 39. Final report format
+
+When execution reaches a meaningful stopping point, report:
+
+**A. Delivered product:** What actually exists.
+
+**B. Launch instructions:** Exact commands and browser requirements.
+
+**C. Functional systems:** What is implemented and verified.
+
+**D. Physics and gameplay:** Which systems use actual physics, raycasts, state machines, or documented approximations.
+
+**E. Test evidence:** Commands, outcomes, and remaining failures.
+
+**F. Performance:** Measured values, configuration, test duration, and unmeasured metrics.
+
+**G. Defects:** Major issues discovered, fixes applied, and unresolved bugs.
+
+**H. Tool usage:** Which tools and agents were actually available and used.
+
+**I. Export status:** Whether the project is genuinely exportable and whether local execution has been verified.
+
+**J. Remaining limitations:** Honest and specific.
+
+**K. Next steps:** The three highest-value improvements.
+
+Do not invent completion percentages. If a percentage is reported, calculate it from explicitly defined acceptance criteria.
+
+---
+
+# FINAL EXECUTION COMMAND
+
+Begin immediately.
+
+1. Verify the real environment.
+2. Establish the essential requirements and architecture.
+3. Create the initial project files.
+4. Build the playable vertical slice.
+5. Execute available tests.
+6. Fix actual failures.
+7. Expand simulation depth.
+8. Improve visual quality.
+9. Profile and optimize the running game.
+10. Prepare the exportable project.
+11. Report only verifiable results.
+
+Use the maximum practical autonomy, reasoning, code execution, and tool capabilities genuinely available to you.
+
+Do not optimize for the length of your response or the apparent complexity of the source code.
+
+Optimize for a realistic, coherent, playable, stable, testable 3D open-world game whose systems behave consistently and whose quality can be demonstrated through evidence.
+
+**Start building PROJECT APEX now. Do not return a plan alone.**

@@ -1,0 +1,8 @@
+{
+  "name": "Project Apex: City Response",
+  "description": "Autonomous 3D open-world action game featuring realistic third-person exploration, vehicle simulation, intelligent NPC behaviors, police wanted system, dynamic missions, and WebGL city rendering.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
